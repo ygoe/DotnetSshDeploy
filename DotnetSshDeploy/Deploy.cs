@@ -15,6 +15,7 @@ namespace DotnetSshDeploy
 
 		private bool quietMode;
 		private bool verboseMode;
+		private bool encryptPasswordMode;
 		private string configFileName;
 		private string profileName;
 		private ConfigFile configFile;
@@ -29,6 +30,7 @@ namespace DotnetSshDeploy
 		private List<string> filesToDelete = new List<string>();
 		private string tempUploadDirectory = "";
 		private bool profileChanged;
+		private string encryptedPasswordPrefix = "$$crypt$$";
 
 		#endregion Private data
 
@@ -70,6 +72,8 @@ namespace DotnetSshDeploy
 			FindConfigFile();
 			ReadConfigFile();
 			LoadProfile();
+			if (encryptPasswordMode)
+				return HandleEncryptPassword();
 			if (!quietMode)
 				Console.WriteLine($"Deploying to {activeProfile.UserName}@{activeProfile.HostName}:{activeProfile.RemotePath}");
 
@@ -131,6 +135,9 @@ namespace DotnetSshDeploy
 					{
 						case "c":
 							nextArgHandler = x => configFileName = x;
+							break;
+						case "e":
+							encryptPasswordMode = true;
 							break;
 						case "q":
 							quietMode = true;
@@ -240,7 +247,7 @@ namespace DotnetSshDeploy
 			}
 		}
 
-		private bool SaveProfile()
+		private bool SaveProfile(bool throwOnError = false)
 		{
 			if (verboseMode)
 				Console.WriteLine("- Saving config file due to changes");
@@ -261,7 +268,9 @@ namespace DotnetSshDeploy
 			}
 			catch (Exception ex)
 			{
-				Console.Error.WriteLine($"Error serializing config file: {ex.Message}", ex);
+				if (throwOnError)
+					throw new AppException($"Error serializing config file: {ex.Message}", ex);
+				Console.Error.WriteLine($"Error serializing config file: {ex.Message}");
 				return false;
 			}
 
@@ -272,6 +281,8 @@ namespace DotnetSshDeploy
 			}
 			catch (Exception ex)
 			{
+				if (throwOnError)
+					throw new AppException($"Error backing up config file: {ex.Message}", ex);
 				Console.Error.WriteLine($"Error backing up config file: {ex.Message}");
 				return false;
 			}
@@ -283,7 +294,9 @@ namespace DotnetSshDeploy
 			}
 			catch (Exception ex)
 			{
-				Console.Error.WriteLine($"Error writing config file (backup created): {ex.Message}", ex);
+				if (throwOnError)
+					throw new AppException($"Error writing config file (backup created): {ex.Message}", ex);
+				Console.Error.WriteLine($"Error writing config file (backup created): {ex.Message}");
 				return false;
 			}
 
@@ -300,6 +313,49 @@ namespace DotnetSshDeploy
 			return true;
 		}
 
+		private int HandleEncryptPassword()
+		{
+#if !NETCOREAPP2_0
+			Console.Write("Password [" + (!string.IsNullOrEmpty(activeProfile.Password) ? "****" : "") + "] (space to delete): ");
+			string input = ReadLineMasked();
+			if (input == " ")
+				activeProfile.Password = "";
+			else if (input != "")
+				activeProfile.Password = encryptedPasswordPrefix + SshDeploy.CryptoHelper.EncryptWindows(input);
+			SaveProfile(throwOnError: true);
+			return 0;
+#else
+			throw new AppException("Encrypted passwords are not supported in this version.");
+#endif
+		}
+
+		private static string ReadLineMasked()
+		{
+			string input = "";
+			while (true)
+			{
+				var keyInfo = Console.ReadKey(true);
+				if (keyInfo.Key == ConsoleKey.Enter)
+				{
+					break;
+				}
+				else if (keyInfo.Key == ConsoleKey.Backspace)
+				{
+					if (input.Length > 0)
+					{
+						input = input.Substring(0, input.Length - 1);
+						Console.Write("\b \b");
+					}
+				}
+				else if (keyInfo.KeyChar != 0)
+				{
+					input += keyInfo.KeyChar;
+					Console.Write("*");
+				}
+			}
+			return input;
+		}
+
 		#endregion Configuration file methods
 
 		#region Connection methods
@@ -310,7 +366,16 @@ namespace DotnetSshDeploy
 			var authMethods = new List<AuthenticationMethod>();
 			if (!string.IsNullOrWhiteSpace(activeProfile.Password))
 			{
-				authMethods.Add(new PasswordAuthenticationMethod(activeProfile.UserName, activeProfile.Password));
+				string password = activeProfile.Password;
+				if (password.StartsWith(encryptedPasswordPrefix))
+				{
+#if !NETCOREAPP2_0
+					password = SshDeploy.CryptoHelper.DecryptWindows(password.Substring(encryptedPasswordPrefix.Length));
+#else
+					throw new AppException("Encrypted passwords are not supported in this version.");
+#endif
+				}
+				authMethods.Add(new PasswordAuthenticationMethod(activeProfile.UserName, password));
 			}
 			if (!string.IsNullOrWhiteSpace(activeProfile.KeyFileName))
 			{

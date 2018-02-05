@@ -79,6 +79,7 @@
     <Compile Include="..\DotnetSshDeploy\fastJSON\SafeDictionary.cs">
       <Link>fastJSON\SafeDictionary.cs</Link>
     </Compile>
+    <Compile Include="CryptoHelper.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
