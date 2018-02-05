@@ -86,21 +86,19 @@ namespace DotnetSshDeploy
 				Connect(sftpClient);
 				ChangeRemoteDirectory(sftpClient);
 				FindRemoteFiles(sftpClient);
-
-				if (!localOnlyFiles.Any() && !remoteOnlyFiles.Any() && !localUpdatedFiles.Any())
+				if (!HandleNewRemoteOnlyFiles())
+					return 2;
+				if (profileChanged && !SaveProfile())
+					Console.Error.WriteLine("Warning: Profile data will be unchanged at next deployment.");
+				if (!filesToUpload.Any() && !filesToDelete.Any())
 				{
 					if (!quietMode)
 						Console.WriteLine("Remote already up-to-date.");
 					return 0;
 				}
-				if (!HandleNewRemoteOnlyFiles())
-					return 2;
 
 				RunSshCommands(sshClient, "pre-upload", activeProfile.Commands.PreUpload);
 				UploadFiles(sftpClient);
-				if (profileChanged && !SaveProfile())
-					Console.Error.WriteLine("Warning: Profile data will be unchanged at next deployment.");
-
 				RunSshCommands(sshClient, "pre-install", activeProfile.Commands.PreInstall);
 				DeleteFiles(sftpClient);
 				CopyUploadedFiles(sshClient);
@@ -550,6 +548,11 @@ namespace DotnetSshDeploy
 				filesToUpload = localOnlyFiles
 					.Concat(localUpdatedFiles)
 					.ToList();
+				if (verboseMode)
+				{
+					Console.WriteLine($"- {localOnlyFiles.Count} local-only, {remoteOnlyFiles.Count} remote-only, {localUpdatedFiles.Count} locally updated files");
+					Console.WriteLine($"- {filesToUpload.Count} files to upload");
+				}
 			}
 		}
 
@@ -558,6 +561,24 @@ namespace DotnetSshDeploy
 			foreach (var file in remoteOnlyFiles.Where(f => !IsIgnoredRemoteFile(f.Name)))
 			{
 				if (!HandleNewRemoteOnlyFile(file)) return false;
+			}
+			if (verboseMode)
+			{
+				var remoteIgnoredFiles = remoteOnlyFiles
+					.Where(f => IsIgnoredRemoteFile(f.Name))
+					.ToList();
+				if (remoteIgnoredFiles.Any())
+				{
+					Console.WriteLine("- Current remote-only ignored files:");
+					foreach (var remoteIgnoredFile in remoteIgnoredFiles)
+					{
+						if (remoteIgnoredFile.Name.EndsWith("/"))
+							Console.WriteLine($"  - {remoteIgnoredFile.Name}");
+						else
+							Console.WriteLine($"  - {remoteIgnoredFile.Name} ({remoteIgnoredFile.Length:N0} bytes)");
+					}
+				}
+				Console.WriteLine($"- {filesToDelete.Count} files to delete");
 			}
 			return true;
 		}
@@ -632,7 +653,7 @@ namespace DotnetSshDeploy
 					if (!file.Name.EndsWith("/"))
 					{
 						if (verboseMode)
-							Console.WriteLine($"- Uploading file {file.Name}");
+							Console.WriteLine($"- Uploading file {file.Name} ({file.Length:N0} bytes)");
 						using (var stream = File.OpenRead(Path.Combine(localPath, file.Name)))
 						{
 							sftpClient.UploadFile(stream, tempUploadDirectory + "/" + file.Name);
@@ -660,7 +681,7 @@ namespace DotnetSshDeploy
 				try
 				{
 					if (verboseMode)
-						Console.WriteLine($"- Deleting file {file}");
+						Console.WriteLine($"- Deleting file {file} ({file.Length:N0} bytes)");
 					sftpClient.Delete(file);
 				}
 				catch (Exception ex)
@@ -674,7 +695,7 @@ namespace DotnetSshDeploy
 		{
 			if (filesToUpload.Any())
 			{
-				string commandText = $"cp -prv \"{activeProfile.RemotePath}\"/{tempUploadDirectory}/* \"{activeProfile.RemotePath}\"";
+				string commandText = $"cp -prvT \"{activeProfile.RemotePath}/{tempUploadDirectory}\" \"{activeProfile.RemotePath}\"";
 				if (!RunSshCommands(sshClient, "copy", new[] { commandText }, throwOnError: false, showName: false))
 					throw new AppException("New files could not be copied.");
 				commandText = $"rm -r \"{activeProfile.RemotePath}/{tempUploadDirectory}\"";
@@ -758,6 +779,7 @@ namespace DotnetSshDeploy
 		public List<string> IgnoredLocalFiles { get; set; }
 		[JsonConditional]
 		public List<string> IgnoredRemoteFiles { get; set; }
+		[JsonConditional]
 		public ProfileCommands Commands { get; set; }
 	}
 
