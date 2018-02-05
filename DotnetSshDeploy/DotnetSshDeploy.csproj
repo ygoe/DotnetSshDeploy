@@ -16,7 +16,7 @@
 
   <ItemGroup>
     <PackageReference Include="SSH.NET" Version="2016.1.0" />
-    <PackageReference Include="Unclassified.NetRevisionTask" Version="0.2.1-beta" PrivateAssets="all" />
+    <PackageReference Include="Unclassified.NetRevisionTask" Version="0.2.2-beta" PrivateAssets="all" />
   </ItemGroup>
 
 </Project>
