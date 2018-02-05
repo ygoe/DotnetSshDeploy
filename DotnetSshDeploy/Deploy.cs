@@ -610,10 +610,10 @@ namespace DotnetSshDeploy
 			if (filesToUpload.Any())
 			{
 				string commandText = $"cp -prv \"{activeProfile.RemotePath}\"/{tempUploadDirectory}/* \"{activeProfile.RemotePath}\"";
-				if (!RunSshCommands(sshClient, "copy", new[] { commandText }, throwOnError: false))
+				if (!RunSshCommands(sshClient, "copy", new[] { commandText }, throwOnError: false, showName: false))
 					throw new AppException("New files could not be copied.");
 				commandText = $"rm -r \"{activeProfile.RemotePath}/{tempUploadDirectory}\"";
-				if (!RunSshCommands(sshClient, "delete", new[] { commandText }, throwOnError: false))
+				if (!RunSshCommands(sshClient, "delete", new[] { commandText }, throwOnError: false, showName: false))
 					Console.Error.WriteLine("Uploaded temporary files could not be deleted.");
 			}
 		}
@@ -622,16 +622,15 @@ namespace DotnetSshDeploy
 
 		#region Command execution methods
 
-		private bool RunSshCommands(SshClient client, string name, IEnumerable<string> commands, bool throwOnError = true)
+		private bool RunSshCommands(SshClient client, string name, IEnumerable<string> commands, bool throwOnError = true, bool showName = true)
 		{
 			if (commands?.Any() != true) return true;   // Nothing to do
 
+			string capitalisedName = name.Length > 1 ? name.Substring(0, 1).ToUpper() + name.Substring(1) : name.ToUpper();
 			if (!client.IsConnected)
 				Connect(client);
-
-			if (!quietMode)
+			if (!quietMode && showName || verboseMode)
 				Console.WriteLine($"Running {name} commands");
-			name = name.Length > 1 ? name.Substring(0, 1).ToUpper() + name.Substring(1) : name.ToUpper();
 
 			foreach (string commandText in commands)
 			{
@@ -648,16 +647,16 @@ namespace DotnetSshDeploy
 					if (command.ExitStatus != 0)
 					{
 						if (throwOnError)
-							throw new AppException($"{name} command failed: {commandText}");
-						Console.Error.WriteLine($"{name} command failed: {commandText}");
+							throw new AppException($"{capitalisedName} command failed: {commandText}");
+						Console.Error.WriteLine($"{capitalisedName} command failed: {commandText}");
 						return false;
 					}
 				}
 				catch (Exception ex)
 				{
 					if (throwOnError)
-						throw new AppException($"Error executing command: {ex.Message}", ex);
-					Console.Error.WriteLine($"Error executing command: {ex.Message}", ex);
+						throw new AppException($"Error executing {name} command: {commandText}\n  {ex.Message}", ex);
+					Console.Error.WriteLine($"Error executing {name} command: {commandText}\n  {ex.Message}", ex);
 					return false;
 				}
 			}
