@@ -68,6 +68,8 @@ namespace DotnetSshDeploy
 
 		public int ExecuteInternal(string[] args)
 		{
+			var startTime = DateTime.UtcNow;
+
 			ReadArgs(args);
 			FindConfigFile();
 			ReadConfigFile();
@@ -105,7 +107,7 @@ namespace DotnetSshDeploy
 				RunSshCommands(sshClient, "post-install", activeProfile.Commands.PostInstall);
 			}
 			if (!quietMode)
-				Console.WriteLine("Finished.");
+				Console.WriteLine($"Finished in {(DateTime.UtcNow - startTime).TotalSeconds:N2}s.");
 			return 0;
 		}
 
