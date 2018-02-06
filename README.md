@@ -26,7 +26,7 @@ Install the NuGet package **Unclassified.DotnetSshDeploy** to your **.NET Core 2
 
 Command invocation: (only in the project directory)
 
-    dotnet publish
+    dotnet publish -c Release
     dotnet ssh-deploy
 
 If you have multiple target environments to deploy to, you can select one of the configured profiles:
@@ -139,11 +139,15 @@ A list of commands to execute on the SSH server after the files are deleted and 
 
 ### Command line options
 
-    ssh-deploy [-c configfile] [-q] [-v] [profilename]
+    ssh-deploy [-c configfile] [-e] [-q] [-v] [profilename]
 
 #### `-c`
 
 Specifies the configuration file to use. See above for default locations if unspecified.
+
+#### `-e`
+
+Asks for the SSH login password and stores it in encrypted form into the profile. (This is only supported on Windows with the standalone tool.)
 
 #### `-q`
 
@@ -159,9 +163,13 @@ Currently there is no **non-interactive** mode. ssh-deploy will always ask you w
 
 ## Building
 
+You can build this solution in Visual Studio or by running the command:
+
+    build.cmd
+
 Visual Studio 2017 (15.3) or later with .NET Core 2.0 support is required to build this solution.
 
-The standalone project embeds a gzip-compressed copy of the SSH.NET DLL file. This file is created before building by calling `7za`, a standalone console version of the popular 7-Zip compression application. So make sure that `7za` is available in your %PATH%.
+The standalone project embeds a gzip-compressed copy of the SSH.NET DLL file. This file is created before building by calling `7za`, a standalone console version of the popular 7-Zip compression application. So make sure that `7za` is available in your %PATH%. You can [download it](http://7-zip.org/download.html) with the “7-Zip Extra” archive.
 
 ## License
 
