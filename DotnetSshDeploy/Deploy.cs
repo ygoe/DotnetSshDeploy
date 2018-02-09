@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
 using System.Threading;
+using System.Threading.Tasks;
 using fastJSON;
 using Renci.SshNet;
 
@@ -14,6 +15,7 @@ namespace DotnetSshDeploy
 		#region Private data
 
 		private bool quietMode;
+		private bool hideProgressMode;
 		private bool verboseMode;
 		private bool encryptPasswordMode;
 		private string configFileName;
@@ -138,6 +140,9 @@ namespace DotnetSshDeploy
 							break;
 						case "e":
 							encryptPasswordMode = true;
+							break;
+						case "p":
+							hideProgressMode = true;
 							break;
 						case "q":
 							quietMode = true;
@@ -625,7 +630,12 @@ namespace DotnetSshDeploy
 
 		#region File transfer methods
 
-		private void UploadFiles(SftpClient sftpClient)
+		private DateTime uploadStartTime;
+		private long uploadedBytes;
+		private long uploadTotalBytes;
+		private bool lastLineIsProgress;
+
+		private async void UploadFiles(SftpClient sftpClient)
 		{
 			if (!filesToUpload.Any()) return;   // Nothing to do
 
@@ -634,41 +644,126 @@ namespace DotnetSshDeploy
 				Console.WriteLine($"Uploading {filesToUpload.Count} files ({filesToUpload.Sum(f => f.Length)} bytes) to {tempUploadDirectory}");
 			var createdDirectories = new HashSet<string>();
 			string localPath = GetAbsolutePath(activeProfile.LocalPath);
-			foreach (var file in filesToUpload)
+			uploadStartTime = DateTime.UtcNow;
+			uploadTotalBytes = filesToUpload.Sum(f => f.Length);
+			var cts = new CancellationTokenSource();
+			var progressTask = Task.Run(() => ShowUploadProgress(cts.Token));
+			try
 			{
-				try
+				foreach (var file in filesToUpload)
 				{
-					string remoteFile = tempUploadDirectory + "/" + file.Name;
-					string[] segments = remoteFile.Split('/');
-					for (int i = 1; i < segments.Length; i++)
+					try
 					{
-						string path = string.Join("/", segments.Take(i));
-						if (!createdDirectories.Contains(path))
+						CreateDirectoryForFile(sftpClient, file, createdDirectories);
+						if (!file.Name.EndsWith("/"))
 						{
-							if (verboseMode)
-								Console.WriteLine($"- Creating remote directory {path}");
-							sftpClient.CreateDirectory(path);
-							createdDirectories.Add(path);
+							UploadFile(sftpClient, file, localPath);
 						}
 					}
+					catch (Exception ex)
+					{
+						throw new AppException($"Error uploading file \"{file.Name}\": {ex.Message}", ex);
+					}
+				}
+			}
+			finally
+			{
+				cts.Cancel();
+				await progressTask;
+			}
+		}
 
-					if (!file.Name.EndsWith("/"))
+		private void CreateDirectoryForFile(SftpClient sftpClient, FileEntry file, HashSet<string> createdDirectories)
+		{
+			string remoteFile = tempUploadDirectory + "/" + file.Name;
+			string[] segments = remoteFile.Split('/');
+			for (int i = 1; i < segments.Length; i++)
+			{
+				string path = string.Join("/", segments.Take(i));
+				if (!createdDirectories.Contains(path))
+				{
+					if (verboseMode)
 					{
-						if (verboseMode)
-							Console.WriteLine($"- Uploading file {file.Name} ({file.Length:N0} bytes)");
-						using (var stream = File.OpenRead(Path.Combine(localPath, file.Name)))
+						lock (this)
 						{
-							sftpClient.UploadFile(stream, tempUploadDirectory + "/" + file.Name);
+							Console.WriteLine($"- Creating remote directory {path}");
+							lastLineIsProgress = false;
 						}
-						var sftpFile = sftpClient.Get(tempUploadDirectory + "/" + file.Name);
-						sftpFile.LastWriteTimeUtc = file.UtcTime;
-						sftpFile.UpdateStatus();
+					}
+					sftpClient.CreateDirectory(path);
+					createdDirectories.Add(path);
+				}
+			}
+		}
+
+		private void UploadFile(SftpClient sftpClient, FileEntry file, string localPath)
+		{
+			if (verboseMode)
+			{
+				lock (this)
+				{
+					Console.WriteLine($"- Uploading file {file.Name} ({file.Length:N0} bytes)");
+					lastLineIsProgress = false;
+				}
+			}
+			long lastProgress = 0;
+			using (var stream = File.OpenRead(Path.Combine(localPath, file.Name)))
+			{
+				sftpClient.UploadFile(stream, tempUploadDirectory + "/" + file.Name, offset =>
+				{
+					lock (this)
+					{
+						uploadedBytes -= lastProgress;
+						uploadedBytes += lastProgress = (long)offset;
+					}
+				});
+			}
+			var sftpFile = sftpClient.Get(tempUploadDirectory + "/" + file.Name);
+			sftpFile.LastWriteTimeUtc = file.UtcTime;
+			sftpFile.UpdateStatus();
+			lock (this)
+			{
+				uploadedBytes -= lastProgress;
+				uploadedBytes += file.Length;
+			}
+		}
+
+		private async Task ShowUploadProgress(CancellationToken cancellationToken)
+		{
+			if (quietMode || hideProgressMode)
+				return;
+
+			string padding = new string(' ', 20);
+			while (!cancellationToken.IsCancellationRequested)
+			{
+				lock (this)
+				{
+					// Start computing time after 2% of uploaded data, at least 1 byte
+					if (uploadedBytes > 0 && uploadedBytes > uploadTotalBytes / 50)
+					{
+						DateTime now = DateTime.UtcNow;
+						double elapsedSeconds = (now - uploadStartTime).TotalSeconds;
+						double totalSeconds = elapsedSeconds / uploadedBytes * uploadTotalBytes;
+						double remainingSeconds = totalSeconds - elapsedSeconds;
+						if (lastLineIsProgress)
+							Console.CursorTop = Math.Max(0, Console.CursorTop - 1);
+						if (remainingSeconds > 60)
+							Console.WriteLine($"{remainingSeconds / 60:N0} minutes remaining{padding}");
+						else
+							Console.WriteLine($"{remainingSeconds:N0} seconds remaining{padding}");
+						lastLineIsProgress = true;
 					}
 				}
-				catch (Exception ex)
-				{
-					throw new AppException($"Error uploading file \"{file.Name}\": {ex.Message}", ex);
-				}
+				await Task.Delay(1000, cancellationToken).ContinueWith(task => { });   // Continuation avoids TaskCanceledException
+			}
+
+			// Clear last progress output
+			if (lastLineIsProgress)
+			{
+				Console.CursorTop = Math.Max(0, Console.CursorTop - 1);
+				Console.WriteLine($"{padding}{padding}");
+				Console.CursorTop = Math.Max(0, Console.CursorTop - 1);
+				lastLineIsProgress = false;
 			}
 		}
 

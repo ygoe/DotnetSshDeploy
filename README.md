@@ -139,7 +139,7 @@ A list of commands to execute on the SSH server after the files are deleted and 
 
 ### Command line options
 
-    ssh-deploy [-c configfile] [-e] [-q] [-v] [profilename]
+    ssh-deploy [-c configfile] [-e] [-p] [-q] [-v] [profilename]
 
 #### `-c`
 
@@ -152,6 +152,10 @@ Asks for the SSH login password and stores it in encrypted form into the profile
 #### `-q`
 
 Quiet mode. Does not print anything except error messages and questions about what to do with remote-only files.
+
+#### `-p`
+
+Hide upload progress. Prints normal messages but no upload progress information. Quiet mode includes this.
 
 #### `-v`
 
