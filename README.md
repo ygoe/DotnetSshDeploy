@@ -11,6 +11,7 @@ Deploys websites and applications to SSH servers through the dotnet CLI command 
 * Runs commands before and after installation to stop and start the application server
 * Can ignore local and remote files by simple glob patterns (`?`, `*` and `**` only)
 * Supports multiple deployment profiles
+* Multi-threaded remote file operations, much faster over internet connections
 
 ## Installation
 
@@ -139,7 +140,7 @@ A list of commands to execute on the SSH server after the files are deleted and 
 
 ### Command line options
 
-    ssh-deploy [-c configfile] [-e] [-p] [-q] [-v] [profilename]
+    ssh-deploy [-c configfile] [-e] [-p] [-q] [-s] [-v] [profilename]
 
 #### `-c`
 
@@ -149,13 +150,17 @@ Specifies the configuration file to use. See above for default locations if unsp
 
 Asks for the SSH login password and stores it in encrypted form into the profile. (This is only supported on Windows with the standalone tool.)
 
+#### `-p`
+
+Hide upload progress. Prints normal messages but no upload progress information. Quiet mode includes this.
+
 #### `-q`
 
 Quiet mode. Does not print anything except error messages and questions about what to do with remote-only files.
 
-#### `-p`
+#### `-s`
 
-Hide upload progress. Prints normal messages but no upload progress information. Quiet mode includes this.
+Single-thread mode. Performs all remote file operations in the main thread and does not scan/upload/delete files in parallel. This takes a lot longer over the internet but might be helpful with parallel errors when uploading/deleting files.
 
 #### `-v`
 
@@ -173,7 +178,7 @@ You can build this solution in Visual Studio or by running the command:
 
 Visual Studio 2017 (15.3) or later with .NET Core 2.0 support is required to build this solution.
 
-The standalone project embeds a gzip-compressed copy of the SSH.NET DLL file. This file is created before building by calling `7za`, a standalone console version of the popular 7-Zip compression application. So make sure that `7za` is available in your %PATH%. You can [download it](http://7-zip.org/download.html) with the “7-Zip Extra” archive.
+The standalone project embeds a gzip-compressed copy of the SSH.NET DLL file. This file is created before building by calling `7za`, a standalone console version of the popular 7-Zip compression application. So make sure that `7za` is available in your %PATH%. You can [download it](https://7-zip.org/download.html) with the “7-Zip Extra” archive.
 
 ## License
 

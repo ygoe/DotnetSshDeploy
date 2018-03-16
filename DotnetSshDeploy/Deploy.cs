@@ -18,6 +18,7 @@ namespace DotnetSshDeploy
 		private bool hideProgressMode;
 		private bool verboseMode;
 		private bool encryptPasswordMode;
+		private bool singleThread;
 		private string configFileName;
 		private string profileName;
 		private ConfigFile configFile;
@@ -118,7 +119,7 @@ namespace DotnetSshDeploy
 		private void ReadArgs(string[] args)
 		{
 			bool optionMode = true;
-			Action<string> nextArgHandler = null;
+			Action<string> nextArgHandler = null;   // NOTE: This can only handle a single next argument at a time
 
 			foreach (string arg in args)
 			{
@@ -146,6 +147,9 @@ namespace DotnetSshDeploy
 							break;
 						case "q":
 							quietMode = true;
+							break;
+						case "s":
+							singleThread = true;
 							break;
 						case "v":
 							verboseMode = true;
@@ -516,8 +520,13 @@ namespace DotnetSshDeploy
 
 		private void FindRemoteFiles(SftpClient client, string relativePath = "")
 		{
+			if (verboseMode)
+			{
+				Console.WriteLine($"- {Thread.CurrentThread.ManagedThreadId.ToString().PadLeft(2)}> Scanning remote path: {relativePath}");
+			}
 			try
 			{
+				var tasks = new List<Task>();
 				string path = client.WorkingDirectory + "/" + relativePath;
 				foreach (var file in client.ListDirectory(path).ToList())
 				{
@@ -528,13 +537,17 @@ namespace DotnetSshDeploy
 					if (file.IsDirectory)
 					{
 						remoteFiles.Add(new FileEntry { Name = relativeFile + "/" });
-						FindRemoteFiles(client, relativeFile);
+						if (singleThread)
+							FindRemoteFiles(client, relativeFile);
+						else
+							tasks.Add(Task.Run(() => FindRemoteFiles(client, relativeFile)));
 					}
 					else
 					{
 						remoteFiles.Add(new FileEntry { Name = relativeFile, UtcTime = file.LastWriteTimeUtc, Length = file.Length });
 					}
 				}
+				tasks.ForEach(task => task.GetAwaiter().GetResult());
 			}
 			catch (Exception ex) when (!(ex is AppException))
 			{
@@ -635,7 +648,7 @@ namespace DotnetSshDeploy
 		private long uploadTotalBytes;
 		private bool lastLineIsProgress;
 
-		private async void UploadFiles(SftpClient sftpClient)
+		private void UploadFiles(SftpClient sftpClient)
 		{
 			if (!filesToUpload.Any()) return;   // Nothing to do
 
@@ -650,6 +663,7 @@ namespace DotnetSshDeploy
 			var progressTask = Task.Run(() => ShowUploadProgress(cts.Token));
 			try
 			{
+				var tasks = new List<Task>();
 				foreach (var file in filesToUpload)
 				{
 					try
@@ -657,19 +671,33 @@ namespace DotnetSshDeploy
 						CreateDirectoryForFile(sftpClient, file, createdDirectories);
 						if (!file.Name.EndsWith("/"))
 						{
-							UploadFile(sftpClient, file, localPath);
+							if (singleThread)
+								UploadFile(sftpClient, file, localPath);
+							else
+								tasks.Add(Task.Run(() =>
+								{
+									try
+									{
+										UploadFile(sftpClient, file, localPath);
+									}
+									catch (Exception ex)
+									{
+										throw new AppException($"Error uploading file \"{file.Name}\": {ex.Message}", ex);
+									}
+								}));
 						}
 					}
-					catch (Exception ex)
+					catch (Exception ex) when (!(ex is AppException))
 					{
 						throw new AppException($"Error uploading file \"{file.Name}\": {ex.Message}", ex);
 					}
 				}
+				tasks.ForEach(task => task.GetAwaiter().GetResult());
 			}
 			finally
 			{
 				cts.Cancel();
-				await progressTask;
+				progressTask.GetAwaiter().GetResult();
 			}
 		}
 
@@ -702,7 +730,7 @@ namespace DotnetSshDeploy
 			{
 				lock (this)
 				{
-					Console.WriteLine($"- Uploading file {file.Name} ({file.Length:N0} bytes)");
+					Console.WriteLine($"- {Thread.CurrentThread.ManagedThreadId.ToString().PadLeft(2)}> Uploading file {file.Name} ({file.Length:N0} bytes)");
 					lastLineIsProgress = false;
 				}
 			}
@@ -773,19 +801,34 @@ namespace DotnetSshDeploy
 
 			if (!quietMode)
 				Console.WriteLine($"Deleting {filesToDelete.Count} files ({filesToDelete.Sum(f => f.Length)} bytes)");
+			var tasks = new List<Task>();
 			foreach (string file in filesToDelete.OrderByDescending(f => f))
 			{
 				try
 				{
 					if (verboseMode)
 						Console.WriteLine($"- Deleting file {file} ({file.Length:N0} bytes)");
-					sftpClient.Delete(file);
+					if (singleThread)
+						sftpClient.Delete(file);
+					else
+						tasks.Add(Task.Run(() =>
+						{
+							try
+							{
+								sftpClient.Delete(file);
+							}
+							catch (Exception ex)
+							{
+								throw new AppException($"Error deleting file \"{file}\": {ex.Message}", ex);
+							}
+						}));
 				}
-				catch (Exception ex)
+				catch (Exception ex) when (!(ex is AppException))
 				{
 					throw new AppException($"Error deleting file \"{file}\": {ex.Message}", ex);
 				}
 			}
+			tasks.ForEach(task => task.GetAwaiter().GetResult());
 		}
 
 		private void CopyUploadedFiles(SshClient sshClient)
