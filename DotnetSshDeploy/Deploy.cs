@@ -52,7 +52,14 @@ namespace DotnetSshDeploy
 			}
 			catch (Exception ex)
 			{
-				Console.Error.WriteLine($"Error: An unhandled exception has occurred: {ex.Message}");
+				if (verboseMode)
+				{
+					Console.Error.WriteLine($"Error: An unhandled exception has occurred: {ex}");
+				}
+				else
+				{
+					Console.Error.WriteLine($"Error: An unhandled exception has occurred: {ex.Message}");
+				}
 				return 1;
 			}
 			finally
@@ -536,7 +543,10 @@ namespace DotnetSshDeploy
 
 					if (file.IsDirectory)
 					{
-						remoteFiles.Add(new FileEntry { Name = relativeFile + "/" });
+						lock (remoteFiles)
+						{
+							remoteFiles.Add(new FileEntry { Name = relativeFile + "/" });
+						}
 						if (singleThread)
 							FindRemoteFiles(client, relativeFile);
 						else
@@ -544,7 +554,10 @@ namespace DotnetSshDeploy
 					}
 					else
 					{
-						remoteFiles.Add(new FileEntry { Name = relativeFile, UtcTime = file.LastWriteTimeUtc, Length = file.Length });
+						lock (remoteFiles)
+						{
+							remoteFiles.Add(new FileEntry { Name = relativeFile, UtcTime = file.LastWriteTimeUtc, Length = file.Length });
+						}
 					}
 				}
 				tasks.ForEach(task => task.GetAwaiter().GetResult());
