@@ -87,7 +87,7 @@ namespace DotnetSshDeploy
 			if (encryptPasswordMode)
 				return HandleEncryptPassword();
 			if (!quietMode)
-				Console.WriteLine($"Deploying to {activeProfile.UserName}@{activeProfile.HostName}:{activeProfile.RemotePath}");
+				ConsoleOutput($"Deploying to {activeProfile.UserName}@{activeProfile.HostName}:{activeProfile.RemotePath}");
 
 			InitializeConnectionInfo();
 			FindLocalFiles();
@@ -105,7 +105,7 @@ namespace DotnetSshDeploy
 				if (!filesToUpload.Any() && !filesToDelete.Any())
 				{
 					if (!quietMode)
-						Console.WriteLine("Remote already up-to-date.");
+						ConsoleOutput("Remote already up-to-date.");
 					return 0;
 				}
 
@@ -117,7 +117,7 @@ namespace DotnetSshDeploy
 				RunSshCommands(sshClient, "post-install", activeProfile.Commands.PostInstall);
 			}
 			if (!quietMode)
-				Console.WriteLine($"Finished in {(DateTime.UtcNow - startTime).TotalSeconds:N2}s.");
+				ConsoleOutput($"Finished in {(DateTime.UtcNow - startTime).TotalSeconds:N2}s.");
 			return 0;
 		}
 
@@ -213,7 +213,7 @@ namespace DotnetSshDeploy
 				}
 			}
 			if (verboseMode)
-				Console.WriteLine($"- Using config file: {configFileName}");
+				ConsoleOutput($"- Using config file: {configFileName}");
 		}
 
 		private void ReadConfigFile()
@@ -266,7 +266,7 @@ namespace DotnetSshDeploy
 		private bool SaveProfile(bool throwOnError = false)
 		{
 			if (verboseMode)
-				Console.WriteLine("- Saving config file due to changes");
+				ConsoleOutput("- Saving config file due to changes");
 
 			// Serialize JSON data
 			string json;
@@ -433,7 +433,7 @@ namespace DotnetSshDeploy
 				{
 					client.Connect();
 					if (verboseMode)
-						Console.WriteLine($"- {client.GetType().Name} connected");
+						ConsoleOutput($"- {client.GetType().Name} connected");
 					return;
 				}
 				catch (Exception ex)
@@ -529,7 +529,7 @@ namespace DotnetSshDeploy
 		{
 			if (verboseMode)
 			{
-				Console.WriteLine($"- {Thread.CurrentThread.ManagedThreadId.ToString().PadLeft(2)}> Scanning remote path: {relativePath}");
+				ConsoleOutput($"- {Thread.CurrentThread.ManagedThreadId,2}> Scanning remote path: {relativePath}");
 			}
 			try
 			{
@@ -583,8 +583,8 @@ namespace DotnetSshDeploy
 					.ToList();
 				if (verboseMode)
 				{
-					Console.WriteLine($"- {localOnlyFiles.Count} local-only, {remoteOnlyFiles.Count} remote-only, {localUpdatedFiles.Count} locally updated files");
-					Console.WriteLine($"- {filesToUpload.Count} files to upload");
+					ConsoleOutput($"- {localOnlyFiles.Count} local-only, {remoteOnlyFiles.Count} remote-only, {localUpdatedFiles.Count} locally updated files");
+					ConsoleOutput($"- {filesToUpload.Count} files to upload");
 				}
 			}
 		}
@@ -602,23 +602,23 @@ namespace DotnetSshDeploy
 					.ToList();
 				if (remoteIgnoredFiles.Any())
 				{
-					Console.WriteLine("- Current remote-only ignored files:");
+					ConsoleOutput("- Current remote-only ignored files:");
 					foreach (var remoteIgnoredFile in remoteIgnoredFiles)
 					{
 						if (remoteIgnoredFile.Name.EndsWith("/"))
-							Console.WriteLine($"  - {remoteIgnoredFile.Name}");
+							ConsoleOutput($"  - {remoteIgnoredFile.Name}");
 						else
-							Console.WriteLine($"  - {remoteIgnoredFile.Name} ({remoteIgnoredFile.Length:N0} bytes)");
+							ConsoleOutput($"  - {remoteIgnoredFile.Name} ({remoteIgnoredFile.Length:N0} bytes)");
 					}
 				}
-				Console.WriteLine($"- {filesToDelete.Count} files to delete");
+				ConsoleOutput($"- {filesToDelete.Count} files to delete");
 			}
 			return true;
 		}
 
 		private bool HandleNewRemoteOnlyFile(FileEntry file)
 		{
-			Console.WriteLine($"File only exists in remote: {file.Name}");
+			ConsoleOutput($"File only exists in remote: {file.Name}");
 			while (true)
 			{
 				Console.Write("(D)elete, (k)eep once, keep (a)lways, (c)ancel?");
@@ -659,21 +659,22 @@ namespace DotnetSshDeploy
 		private DateTime uploadStartTime;
 		private long uploadedBytes;
 		private long uploadTotalBytes;
-		private bool lastLineIsProgress;
 
 		private void UploadFiles(SftpClient sftpClient)
 		{
 			if (!filesToUpload.Any()) return;   // Nothing to do
 
 			tempUploadDirectory = "__upload" + (DateTime.UtcNow.Ticks / 10000);   // Milliseconds
+			uploadTotalBytes = filesToUpload.Sum(f => f.Length);
 			if (!quietMode)
-				Console.WriteLine($"Uploading {filesToUpload.Count} files ({filesToUpload.Sum(f => f.Length)} bytes) to {tempUploadDirectory}");
+			{
+				ConsoleOutput($"Uploading {filesToUpload.Count} files ({FormatByteCount(uploadTotalBytes)}) to {tempUploadDirectory}");
+			}
 			var createdDirectories = new HashSet<string>();
 			string localPath = GetAbsolutePath(activeProfile.LocalPath);
 			uploadStartTime = DateTime.UtcNow;
-			uploadTotalBytes = filesToUpload.Sum(f => f.Length);
-			var cts = new CancellationTokenSource();
-			var progressTask = Task.Run(() => ShowUploadProgress(cts.Token));
+			var progressCts = new CancellationTokenSource();
+			var progressTask = Task.Run(() => ShowUploadProgress(progressCts.Token));
 			try
 			{
 				var tasks = new List<Task>();
@@ -685,8 +686,17 @@ namespace DotnetSshDeploy
 						if (!file.Name.EndsWith("/"))
 						{
 							if (singleThread)
+							{
 								UploadFile(sftpClient, file, localPath);
+							}
 							else
+							{
+								// Make sure there are not more than 5 active upload tasks
+								while (tasks.Count > 5)
+								{
+									tasks.Remove(Task.WhenAny(tasks).GetAwaiter().GetResult());
+								}
+
 								tasks.Add(Task.Run(() =>
 								{
 									try
@@ -698,6 +708,7 @@ namespace DotnetSshDeploy
 										throw new AppException($"Error uploading file \"{file.Name}\": {ex.Message}", ex);
 									}
 								}));
+							}
 						}
 					}
 					catch (Exception ex) when (!(ex is AppException))
@@ -705,11 +716,11 @@ namespace DotnetSshDeploy
 						throw new AppException($"Error uploading file \"{file.Name}\": {ex.Message}", ex);
 					}
 				}
-				tasks.ForEach(task => task.GetAwaiter().GetResult());
+				Task.WhenAll(tasks).GetAwaiter().GetResult();
 			}
 			finally
 			{
-				cts.Cancel();
+				progressCts.Cancel();
 				progressTask.GetAwaiter().GetResult();
 			}
 		}
@@ -727,8 +738,7 @@ namespace DotnetSshDeploy
 					{
 						lock (this)
 						{
-							Console.WriteLine($"- Creating remote directory {path}");
-							lastLineIsProgress = false;
+							ConsoleOutput($"- Creating remote directory {path}");
 						}
 					}
 					sftpClient.CreateDirectory(path);
@@ -743,8 +753,7 @@ namespace DotnetSshDeploy
 			{
 				lock (this)
 				{
-					Console.WriteLine($"- {Thread.CurrentThread.ManagedThreadId.ToString().PadLeft(2)}> Uploading file {file.Name} ({file.Length:N0} bytes)");
-					lastLineIsProgress = false;
+					ConsoleOutput($"- {Thread.CurrentThread.ManagedThreadId,2}> Uploading file {file.Name} ({file.Length:N0} bytes)");
 				}
 			}
 			long lastProgress = 0;
@@ -774,38 +783,31 @@ namespace DotnetSshDeploy
 			if (quietMode || hideProgressMode)
 				return;
 
-			string padding = new string(' ', 20);
 			while (!cancellationToken.IsCancellationRequested)
 			{
 				lock (this)
 				{
 					// Start computing time after 2% of uploaded data, at least 1 byte
-					if (uploadedBytes > 0 && uploadedBytes > uploadTotalBytes / 50)
+					if (uploadedBytes > 0 && uploadTotalBytes > 0 && uploadedBytes > uploadTotalBytes / 50)
 					{
 						DateTime now = DateTime.UtcNow;
+						int percent = (int)Math.Round(uploadedBytes * 100.0 / uploadTotalBytes);
 						double elapsedSeconds = (now - uploadStartTime).TotalSeconds;
-						double totalSeconds = elapsedSeconds / uploadedBytes * uploadTotalBytes;
+						double totalSeconds = (double)elapsedSeconds / uploadedBytes * uploadTotalBytes;
 						double remainingSeconds = totalSeconds - elapsedSeconds;
-						if (lastLineIsProgress)
-							Console.CursorTop = Math.Max(0, Console.CursorTop - 1);
+						string remainingStr;
 						if (remainingSeconds > 60)
-							Console.WriteLine($"{remainingSeconds / 60:N0} minutes remaining{padding}");
+							remainingStr = $"{remainingSeconds / 60:N0} minutes remaining";
 						else
-							Console.WriteLine($"{remainingSeconds:N0} seconds remaining{padding}");
-						lastLineIsProgress = true;
+							remainingStr = $"{remainingSeconds:N0} seconds remaining";
+						ConsoleOutputProgress($"{percent}% - {FormatByteCount(uploadedBytes)}/{FormatByteCount(uploadTotalBytes)} - {remainingStr}");
 					}
 				}
 				await Task.Delay(1000, cancellationToken).ContinueWith(task => { });   // Continuation avoids TaskCanceledException
 			}
 
 			// Clear last progress output
-			if (lastLineIsProgress)
-			{
-				Console.CursorTop = Math.Max(0, Console.CursorTop - 1);
-				Console.WriteLine($"{padding}{padding}");
-				Console.CursorTop = Math.Max(0, Console.CursorTop - 1);
-				lastLineIsProgress = false;
-			}
+			ClearCurrentLine();
 		}
 
 		private void DeleteFiles(SftpClient sftpClient)
@@ -813,14 +815,14 @@ namespace DotnetSshDeploy
 			if (!filesToDelete.Any()) return;   // Nothing to do
 
 			if (!quietMode)
-				Console.WriteLine($"Deleting {filesToDelete.Count} files ({filesToDelete.Sum(f => f.Length)} bytes)");
+				ConsoleOutput($"Deleting {filesToDelete.Count} files ({filesToDelete.Sum(f => f.Length)} bytes)");
 			var tasks = new List<Task>();
 			foreach (string file in filesToDelete.OrderByDescending(f => f))
 			{
 				try
 				{
 					if (verboseMode)
-						Console.WriteLine($"- Deleting file {file} ({file.Length:N0} bytes)");
+						ConsoleOutput($"- Deleting file {file} ({file.Length:N0} bytes)");
 					if (singleThread)
 						sftpClient.Delete(file);
 					else
@@ -869,14 +871,14 @@ namespace DotnetSshDeploy
 			if (!client.IsConnected)
 				Connect(client);
 			if (!quietMode && showName || verboseMode)
-				Console.WriteLine($"Running {name} commands");
+				ConsoleOutput($"Running {name} commands");
 
 			foreach (string commandText in commands)
 			{
 				try
 				{
 					if (verboseMode)
-						Console.WriteLine("$ " + commandText);
+						ConsoleOutput("$ " + commandText);
 					var command = client.RunCommand(commandText);
 					if (command.ExitStatus != 0 || verboseMode)
 					{
@@ -903,6 +905,65 @@ namespace DotnetSshDeploy
 		}
 
 		#endregion Command execution methods
+
+		#region Output methods
+
+		private bool isProgressOnCurrentLine;
+
+		private static string FormatByteCount(long length)
+		{
+			if (length < 1024)
+				return length + " bytes";
+			if (length < 10 * 1024)
+				return Math.Round(length / 1024.0, 1) + " KiB";
+			if (length < 1024 * 1024)
+				return Math.Round(length / 1024.0) + " KiB";
+			if (length < 10 * 1024 * 1024)
+				return Math.Round(length / 1024.0 / 1024.0, 1) + " MiB";
+			return Math.Round(length / 1024.0 / 1024.0) + " MiB";
+		}
+
+		private void ConsoleOutput(string line)
+		{
+			lock (this)
+			{
+				if (isProgressOnCurrentLine)
+				{
+					ClearCurrentLine();
+				}
+				Console.WriteLine(line);
+			}
+		}
+
+		private void ConsoleOutputProgress(string line)
+		{
+			lock (this)
+			{
+				if (isProgressOnCurrentLine)
+				{
+					ClearCurrentLine();
+				}
+				Console.Write(line);
+				isProgressOnCurrentLine = true;
+			}
+		}
+
+		private void ClearCurrentLine()
+		{
+			lock (this)
+			{
+				int length = Console.CursorLeft;
+				if (length > 0)
+				{
+					Console.CursorLeft = 0;
+					Console.Write(new string(' ', length));
+					Console.CursorLeft = 0;
+				}
+				isProgressOnCurrentLine = false;
+			}
+		}
+
+		#endregion Output methods
 	}
 
 	#region Configuration file data structures
