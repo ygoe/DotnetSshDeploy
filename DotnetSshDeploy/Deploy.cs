@@ -28,7 +28,7 @@ namespace DotnetSshDeploy
 		private List<FileEntry> remoteFiles = new List<FileEntry>();
 		private List<FileEntry> localOnlyFiles;
 		private List<FileEntry> remoteOnlyFiles;
-		private List<FileEntry> localUpdatedFiles;
+		private List<FileEntry> localModifiedFiles;
 		private List<FileEntry> filesToUpload;
 		private List<string> filesToDelete = new List<string>();
 		private string tempUploadDirectory = "";
@@ -575,15 +575,17 @@ namespace DotnetSshDeploy
 				remoteOnlyFiles = remoteFiles
 					.Where(rf => !localFiles.Any(lf => lf.Name == rf.Name))
 					.ToList();
-				localUpdatedFiles = localFiles
-					.Where(lf => lf.UtcTime - remoteFiles.FirstOrDefault(rf => rf.Name == lf.Name)?.UtcTime > TimeSpan.FromSeconds(2))
+				localModifiedFiles = localFiles
+					.Where(lf =>
+						lf.Length != remoteFiles.FirstOrDefault(rf => rf.Name == lf.Name)?.Length ||
+						Math.Abs((lf.UtcTime - (remoteFiles.FirstOrDefault(rf => rf.Name == lf.Name)?.UtcTime ?? DateTime.MinValue)).TotalSeconds) > 2)
 					.ToList();
 				filesToUpload = localOnlyFiles
-					.Concat(localUpdatedFiles)
+					.Concat(localModifiedFiles)
 					.ToList();
 				if (verboseMode)
 				{
-					ConsoleOutput($"- {localOnlyFiles.Count} local-only, {remoteOnlyFiles.Count} remote-only, {localUpdatedFiles.Count} locally updated files");
+					ConsoleOutput($"- {localOnlyFiles.Count} local-only, {remoteOnlyFiles.Count} remote-only, {localModifiedFiles.Count} locally updated files");
 					ConsoleOutput($"- {filesToUpload.Count} files to upload");
 				}
 			}
