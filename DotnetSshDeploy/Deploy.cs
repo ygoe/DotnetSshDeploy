@@ -569,6 +569,9 @@ namespace DotnetSshDeploy
 
 			if (relativePath == "")
 			{
+				localFiles.Sort((a, b) => a.Name.CompareTo(b.Name));
+				remoteFiles.Sort((a, b) => a.Name.CompareTo(b.Name));
+
 				localOnlyFiles = localFiles
 					.Where(lf => !remoteFiles.Any(rf => rf.Name == lf.Name))
 					.ToList();
@@ -585,7 +588,7 @@ namespace DotnetSshDeploy
 					.ToList();
 				if (verboseMode)
 				{
-					ConsoleOutput($"- {localOnlyFiles.Count} local-only, {remoteOnlyFiles.Count} remote-only, {localModifiedFiles.Count} locally updated files");
+					ConsoleOutput($"- {localOnlyFiles.Count} local-only, {remoteOnlyFiles.Count} remote-only, {localModifiedFiles.Count} locally modified files");
 					ConsoleOutput($"- {filesToUpload.Count} files to upload");
 				}
 			}
@@ -595,7 +598,19 @@ namespace DotnetSshDeploy
 		{
 			foreach (var file in remoteOnlyFiles.Where(f => !IsIgnoredRemoteFile(f.Name)))
 			{
-				if (!HandleNewRemoteOnlyFile(file)) return false;
+				bool isInDirectoryToDelete = filesToDelete.Any(f => f.EndsWith("/") && file.Name.StartsWith(f));
+				if (isInDirectoryToDelete)
+				{
+					filesToDelete.Add(file.Name);
+					continue;
+				}
+
+				int subdirFilesCount = -1;
+				if (file.Name.EndsWith("/"))
+				{
+					subdirFilesCount = remoteOnlyFiles.Count(f => f.Name.Length > file.Name.Length && f.Name.StartsWith(file.Name));
+				}
+				if (!HandleNewRemoteOnlyFile(file, subdirFilesCount)) return false;
 			}
 			if (verboseMode)
 			{
@@ -618,9 +633,12 @@ namespace DotnetSshDeploy
 			return true;
 		}
 
-		private bool HandleNewRemoteOnlyFile(FileEntry file)
+		private bool HandleNewRemoteOnlyFile(FileEntry file, int subdirFilesCount)
 		{
-			ConsoleOutput($"File only exists in remote: {file.Name}");
+			if (subdirFilesCount < 0)
+				ConsoleOutput($"File only exists in remote: {file.Name}");
+			else
+				ConsoleOutput($"Directory with {subdirFilesCount} entries only exists in remote: {file.Name}");
 			while (true)
 			{
 				Console.Write("(D)elete, (k)eep once, keep (a)lways, (c)ancel?");
@@ -818,34 +836,63 @@ namespace DotnetSshDeploy
 
 			if (!quietMode)
 				ConsoleOutput($"Deleting {filesToDelete.Count} files ({filesToDelete.Sum(f => f.Length)} bytes)");
-			var tasks = new List<Task>();
-			foreach (string file in filesToDelete.OrderByDescending(f => f))
+			// Group by directory depth, delete deepest level first, then their parent directories
+			foreach (var sameDepthGroup in filesToDelete.GroupBy(f => GetPathDirectoryDepth(f)).OrderByDescending(g => g.Key))
 			{
-				try
+				// Wait for completion after each depth level
+				var tasks = new List<Task>();
+				foreach (string file in sameDepthGroup)
 				{
-					if (verboseMode)
-						ConsoleOutput($"- Deleting file {file} ({file.Length:N0} bytes)");
-					if (singleThread)
-						sftpClient.Delete(file);
-					else
-						tasks.Add(Task.Run(() =>
+					try
+					{
+						if (verboseMode)
 						{
-							try
+							if (file.EndsWith("/"))
+								ConsoleOutput($"- Deleting directory {file}");
+							else
+								ConsoleOutput($"- Deleting file {file} ({file.Length:N0} bytes)");
+						}
+
+						if (singleThread)
+						{
+							sftpClient.Delete(file);
+						}
+						else
+						{
+							// Make sure there are not more than 10 active delete tasks
+							while (tasks.Count > 10)
 							{
-								sftpClient.Delete(file);
+								tasks.Remove(Task.WhenAny(tasks).GetAwaiter().GetResult());
 							}
-							catch (Exception ex)
+
+							tasks.Add(Task.Run(() =>
 							{
-								throw new AppException($"Error deleting file \"{file}\": {ex.Message}", ex);
-							}
-						}));
+								try
+								{
+									sftpClient.Delete(file);
+								}
+								catch (Exception ex)
+								{
+									throw new AppException($"Error deleting file \"{file}\": {ex.Message}", ex);
+								}
+							}));
+						}
+					}
+					catch (Exception ex) when (!(ex is AppException))
+					{
+						throw new AppException($"Error deleting file \"{file}\": {ex.Message}", ex);
+					}
 				}
-				catch (Exception ex) when (!(ex is AppException))
-				{
-					throw new AppException($"Error deleting file \"{file}\": {ex.Message}", ex);
-				}
+				Task.WhenAll(tasks).GetAwaiter().GetResult();
 			}
-			tasks.ForEach(task => task.GetAwaiter().GetResult());
+		}
+
+		private static int GetPathDirectoryDepth(string path)
+		{
+			int directoryDepth = path.Count(c => c == '/');
+			if (path.EndsWith("/"))
+				directoryDepth--;
+			return directoryDepth;
 		}
 
 		private void CopyUploadedFiles(SshClient sshClient)
