@@ -2,8 +2,9 @@
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>netcoreapp2.0</TargetFramework>
+    <TargetFrameworks>netcoreapp3.1;net5.0</TargetFrameworks>
     <AssemblyName>dotnet-ssh-deploy</AssemblyName>
+    <DefineConstants>$(DefineConstants);NETCORE</DefineConstants>
 
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     <PackageId>Unclassified.DotnetSshDeploy</PackageId>
@@ -15,8 +16,8 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="SSH.NET" Version="2016.1.0" />
-    <PackageReference Include="Unclassified.NetRevisionTask" Version="0.2.2-beta" PrivateAssets="all" />
+    <PackageReference Include="SSH.NET" Version="2020.0.1" />
+    <PackageReference Include="Unclassified.NetRevisionTask" Version="0.4.0" PrivateAssets="all" />
   </ItemGroup>
 
 </Project>

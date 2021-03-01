@@ -17,7 +17,7 @@ Deploys websites and applications to SSH servers through the dotnet CLI command 
 
 ### dotnet
 
-Install the NuGet package **Unclassified.DotnetSshDeploy** to your **.NET Core 2.0** or **.NET Standard 2.0** project in VS 2017 or later as `DotNetCliToolReference`. Then you can run it from the project directory to deploy your web application.
+Install the NuGet package **Unclassified.DotnetSshDeploy** to your **.NET Core 3.1/5.0** or **.NET Standard 2.0** project in VS 2017 or later as `DotNetCliToolReference`. Then you can run it from the project directory to deploy your web application.
 
 .csproj example: (be sure to use the latest version)
 
@@ -48,7 +48,9 @@ You will also need a profile configuration file which is described below.
 
 The deployment is configured through a single file that should be placed somewhere in your project directory. This file contains all deployment profiles.
 
-<span style="color: #d00000;">**Security notice:** You don’t want hackers to deploy anything to your site, do you? Because the config file contains access credentials or at least personal data, **it should never be added to version control**. Add it to your **.gitignore** file. It should also never land on your web server (it has no use there anyway). Keep this file local and give it to everybody who needs to deploy the project to your server. You might check in a template of this file that contains all public data and has placeholders for confidential data, if you like.</span>
+> ⚠️ **Security notice:**
+>
+> You don’t want hackers to deploy anything to your site, do you? Because the config file contains access credentials or at least personal data, **it should never be added to version control**. Add it to your **.gitignore** file. It should also never land on your web server (it has no use there anyway). Keep this file local and give it to everybody who needs to deploy the project to your server. You might check in a template of this file that contains all public data and has placeholders for confidential data, if you like.
 
 The file sshDeploy.json is automatically discovered in the current working directory and in its subdirectory “Properties” which is common for .NET/Visual Studio projects. If it’s located somewhere else, specify its path with the `-c` command line option.
 
@@ -63,7 +65,7 @@ The JSON structure looks like this:
       "userName": "appuser",
       "keyFileName": "sshDeploy.key",
       "keyFilePassphrase": "keypassphrase",
-      "localPath": "../bin/Release/netcoreapp2.0/publish",
+      "localPath": "../bin/Release/netcoreapp3.1/publish",
       "remotePath": "app",
       "ignoredLocalFiles": [
         "appsettings.Development.json"
@@ -176,7 +178,7 @@ You can build this solution in Visual Studio or by running the command:
 
     build.cmd
 
-Visual Studio 2017 (15.3) or later with .NET Core 2.0 support is required to build this solution.
+Visual Studio 2019 or later with .NET Core 3.1 and 5.0 support is required to build this solution.
 
 The standalone project embeds a gzip-compressed copy of the SSH.NET DLL file. This file is created before building by calling `7za`, a standalone console version of the popular 7-Zip compression application. So make sure that `7za` is available in your %PATH%. You can [download it](https://7-zip.org/download.html) with the “7-Zip Extra” archive.
 

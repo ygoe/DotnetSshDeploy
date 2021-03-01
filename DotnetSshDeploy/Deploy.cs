@@ -331,7 +331,7 @@ namespace DotnetSshDeploy
 
 		private int HandleEncryptPassword()
 		{
-#if !NETCOREAPP2_0
+#if !NETCORE
 			Console.Write("Password [" + (!string.IsNullOrEmpty(activeProfile.Password) ? "****" : "") + "] (space to delete): ");
 			string input = ReadLineMasked();
 			if (input == " ")
@@ -385,7 +385,7 @@ namespace DotnetSshDeploy
 				string password = activeProfile.Password;
 				if (password.StartsWith(encryptedPasswordPrefix))
 				{
-#if !NETCOREAPP2_0
+#if !NETCORE
 					password = SshDeploy.CryptoHelper.DecryptWindows(password.Substring(encryptedPasswordPrefix.Length));
 #else
 					throw new AppException("Encrypted passwords are not supported in this version.");
