@@ -13,6 +13,7 @@
     <Authors>Yves Goergen</Authors>
     <Company>unclassified software development</Company>
     <Copyright>© {copyright:2018} Yves Goergen</Copyright>
+	<PackageLicenseExpression>MIT</PackageLicenseExpression>
   </PropertyGroup>
 
   <ItemGroup>
