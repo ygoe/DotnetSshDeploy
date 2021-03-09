@@ -89,8 +89,7 @@
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <PropertyGroup>
-    <PreBuildEvent>del "$(ProjectDir)\Renci.SshNet.dll.gz" 2&gt;&amp;1 &gt;nul
-7za a -tgzip "$(ProjectDir)\Renci.SshNet.dll.gz" "$(SolutionDir)\packages\SSH.NET.*\lib\net40\Renci.SshNet.dll" &gt;nul</PreBuildEvent>
+    <PreBuildEvent>"$(ProjectDir)prebuild.cmd" "$(ProjectDir)"</PreBuildEvent>
   </PropertyGroup>
   <Target Name="EnsureNuGetPackageBuildImports" BeforeTargets="PrepareForBuild">
     <PropertyGroup>

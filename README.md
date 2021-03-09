@@ -15,17 +15,16 @@ Deploys websites and applications to SSH servers through the dotnet CLI command 
 
 ## Installation
 
-### dotnet
+### dotnet local tool
 
-Install the NuGet package **Unclassified.DotnetSshDeploy** to your **.NET Core 3.1/5.0** or **.NET Standard 2.0** project in VS 2017 or later as `DotNetCliToolReference`. Then you can run it from the project directory to deploy your web application.
+Install the NuGet package **Unclassified.DotnetSshDeploy** to your project directory. Then you can run it from the project directory to deploy your web application. This requires the [.NET 5.0 runtime](https://dotnet.microsoft.com/download) to be installed.
 
-.csproj example: (be sure to use the latest version)
+Installation:
 
-    <ItemGroup>
-      <DotNetCliToolReference Include="Unclassified.DotnetSshDeploy" Version="1.0.0" />
-    </ItemGroup>
+    dotnet new tool-manifest
+    dotnet tool install Unclassified.DotnetSshDeploy
 
-Command invocation: (only in the project directory)
+Command invocation:
 
     dotnet publish -c Release
     dotnet ssh-deploy
@@ -33,6 +32,20 @@ Command invocation: (only in the project directory)
 If you have multiple target environments to deploy to, you can select one of the configured profiles:
 
     dotnet ssh-deploy staging
+
+### dotnet global tool
+
+Install the NuGet package **Unclassified.DotnetSshDeploy** as a global tool. Then you can run it from all directories to deploy your web application. This requires the [.NET 5.0 runtime](https://dotnet.microsoft.com/download) to be installed.
+
+Installation:
+
+    dotnet tool install -g Unclassified.DotnetSshDeploy
+
+Command invocation:
+
+    ssh-deploy
+
+[Learn more about managing .NET tools.](https://docs.microsoft.com/en-us/dotnet/core/tools/global-tools)
 
 ### standalone
 
@@ -178,9 +191,15 @@ You can build this solution in Visual Studio or by running the command:
 
     build.cmd
 
-Visual Studio 2019 or later with .NET Core 3.1 and 5.0 support is required to build this solution.
+### Requirements
 
-The standalone project embeds a gzip-compressed copy of the SSH.NET DLL file. This file is created before building by calling `7za`, a standalone console version of the popular 7-Zip compression application. So make sure that `7za` is available in your %PATH%. You can [download it](https://7-zip.org/download.html) with the “7-Zip Extra” archive.
+Visual Studio 2019 or later with .NET 5.0 support is required to build this solution.
+
+The standalone project embeds a gzip-compressed copy of the SSH.NET DLL file. This file is created before building by calling `7za`, a standalone console version of the popular 7-Zip compression application. So make sure that `7za` is available in your %PATH%. You can [download it](https://7-zip.org/download.html) with the “7-Zip Extra” archive. This compression is performed by the prebuild.cmd file.
+
+### Troubleshooting
+
+If the build fails with an error message like “invalid parameter”, make sure there are not multiple SSH.NET directories in the packages directory. Only the currently used version must exist there. 7za cannot guess which version to pack.
 
 ## License
 

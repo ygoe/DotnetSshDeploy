@@ -2,18 +2,20 @@
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFrameworks>netcoreapp3.1;net5.0</TargetFrameworks>
+    <TargetFramework>net5.0</TargetFramework>
     <AssemblyName>dotnet-ssh-deploy</AssemblyName>
     <DefineConstants>$(DefineConstants);NETCORE</DefineConstants>
 
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>ssh-deploy</ToolCommandName>
     <PackageId>Unclassified.DotnetSshDeploy</PackageId>
     <Product>dotnet-ssh-deploy</Product>
     <Description>Deploys websites and applications to SSH servers through the dotnet CLI command.</Description>
     <Authors>Yves Goergen</Authors>
     <Company>unclassified software development</Company>
-    <Copyright>© {copyright:2018} Yves Goergen</Copyright>
-	<PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <Copyright>© {copyright:2018-} Yves Goergen</Copyright>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
   </PropertyGroup>
 
   <ItemGroup>
