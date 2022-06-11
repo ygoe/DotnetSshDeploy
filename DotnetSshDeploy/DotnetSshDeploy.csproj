@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>net5.0</TargetFramework>
+    <TargetFramework>net6.0</TargetFramework>
     <AssemblyName>dotnet-ssh-deploy</AssemblyName>
     <DefineConstants>$(DefineConstants);NETCORE</DefineConstants>
 
@@ -13,9 +13,10 @@
     <Product>dotnet-ssh-deploy</Product>
     <Description>Deploys websites and applications to SSH servers through the dotnet CLI command.</Description>
     <Authors>Yves Goergen</Authors>
-    <Company>unclassified software development</Company>
     <Copyright>© {copyright:2018-} Yves Goergen</Copyright>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <RepositoryUrl>https://github.com/ygoe/DotnetSshDeploy</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
   </PropertyGroup>
 
   <ItemGroup>
