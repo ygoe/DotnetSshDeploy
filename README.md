@@ -17,7 +17,7 @@ Deploys websites and applications to SSH servers through the dotnet CLI command 
 
 ### dotnet local tool
 
-Install the NuGet package **Unclassified.DotnetSshDeploy** to your project directory. Then you can run it from the project directory to deploy your web application. This requires the [.NET 5.0 runtime](https://dotnet.microsoft.com/download) to be installed.
+Install the NuGet package **Unclassified.DotnetSshDeploy** to your project directory. Then you can run it from the project directory to deploy your web application. This requires the [.NET 6 runtime](https://dotnet.microsoft.com/download) to be installed.
 
 Installation:
 
@@ -35,7 +35,7 @@ If you have multiple target environments to deploy to, you can select one of the
 
 ### dotnet global tool
 
-Install the NuGet package **Unclassified.DotnetSshDeploy** as a global tool. Then you can run it from all directories to deploy your web application. This requires the [.NET 5.0 runtime](https://dotnet.microsoft.com/download) to be installed.
+Install the NuGet package **Unclassified.DotnetSshDeploy** as a global tool. Then you can run it from all directories to deploy your web application. This requires the [.NET 6 runtime](https://dotnet.microsoft.com/download) to be installed.
 
 Installation:
 
@@ -49,7 +49,7 @@ Command invocation:
 
 ### standalone
 
-To use this tool in other environments than dotnet projects, use the separate standalone console application. It’s a single executable that depends on the .NET Framework 4.6.1 or later. You can place this program file somewhere in your %PATH% so you can quickly run it from all your web projects. But you can simply save it in your project directory as well. It is invoked similarly and accepts all the same command line options:
+To use this tool in other environments than dotnet projects, use the separate standalone console application. It’s a single executable that depends on the .NET Framework 4.8 or later. You can place this program file somewhere in your %PATH% so you can quickly run it from all your web projects. But you can simply save it in your project directory as well. It is invoked similarly and accepts all the same command line options:
 
     ssh-deploy
 
@@ -193,7 +193,7 @@ You can build this solution in Visual Studio or by running the command:
 
 ### Requirements
 
-Visual Studio 2019 or later with .NET 5.0 support is required to build this solution.
+Visual Studio 2022 or later with .NET 6.0 support is required to build this solution.
 
 The standalone project embeds a gzip-compressed copy of the SSH.NET DLL file. This file is created before building by calling `7za`, a standalone console version of the popular 7-Zip compression application. So make sure that `7za` is available in your %PATH%. You can [download it](https://7-zip.org/download.html) with the “7-Zip Extra” archive. This compression is performed by the prebuild.cmd file.
 
